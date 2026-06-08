@@ -1,0 +1,5 @@
+# Ignore local AgentWallet state and secrets
+.agentwallet/
+
+# Ignore OS files
+.DS_Store

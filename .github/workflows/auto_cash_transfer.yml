@@ -1,0 +1,23 @@
+name: Auto CASH Transfer
+
+on:
+  schedule:
+    - cron: '*/5 0 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  run-auto-transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make script executable
+        run: chmod +x ./auto_cash_transfer.sh
+
+      - name: Run auto cash transfer script
+        env:
+          AGENTWALLET_TOKEN: ${{ secrets.AGENTWALLET_TOKEN }}
+          AGENTWALLET_DEST: ${{ secrets.AGENTWALLET_DEST }}
+          AGENTWALLET_USERNAME: ${{ secrets.AGENTWALLET_USERNAME }}
+        run: ./auto_cash_transfer.sh
