@@ -100,9 +100,12 @@ printf '  AgentWallet CASH Auto Transfer\n'
 printf '============================================\n\n'
 
 printf '[1/5] Checking balance...\n'
-BALANCE_RAW=$(curl -sS -H "Authorization: Bearer $TOKEN" -w "%{http_code}" "$API/wallets/$USERNAME/balances" || true)
+BALANCE_RAW=$(curl -sS -H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' -w "%{http_code}" "$API/wallets/$USERNAME/balances" || true)
 HTTP_STATUS="${BALANCE_RAW: -3}"
 BALANCE_RESPONSE="${BALANCE_RAW:: -3}"
+RESPONSE_LEN=${#BALANCE_RESPONSE}
+printf '  HTTP status: %s\n' "$HTTP_STATUS"
+printf '  Response length: %s\n' "$RESPONSE_LEN"
 if [ -z "$BALANCE_RESPONSE" ] && [ "$HTTP_STATUS" != "200" ]; then
   echo "ERROR: AgentWallet balances request failed with HTTP status $HTTP_STATUS." >&2
   echo "RAW RESPONSE:" >&2
