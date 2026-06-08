@@ -56,6 +56,10 @@ except Exception as exc:
     sys.stderr.write('--- RAW RESPONSE START ---\n')
     sys.stderr.write(text + '\n')
     sys.stderr.write('--- RAW RESPONSE END ---\n')
+    sys.stderr.write('--- RAW RESPONSE REPR ---\n')
+    sys.stderr.write(repr(text) + '\n')
+    sys.stderr.write('--- RAW RESPONSE REPR END ---\n')
+    sys.stderr.write(f'parse error: {exc}\n')
     sys.exit(1)
 PY
 }
