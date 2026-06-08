@@ -56,9 +56,12 @@ except Exception as exc:
     sys.stderr.write('--- RAW RESPONSE START ---\n')
     sys.stderr.write(text + '\n')
     sys.stderr.write('--- RAW RESPONSE END ---\n')
-    sys.stderr.write('--- RAW RESPONSE REPR ---\n')
-    sys.stderr.write(repr(text) + '\n')
-    sys.stderr.write('--- RAW RESPONSE REPR END ---\n')
+    sys.stderr.write('--- RAW RESPONSE REPR PREFIX ---\n')
+    sys.stderr.write(repr(text[:200]) + '\n')
+    sys.stderr.write('--- RAW RESPONSE REPR PREFIX END ---\n')
+    sys.stderr.write('--- RAW RESPONSE HEX PREFIX ---\n')
+    sys.stderr.write(' '.join(f'{ord(c):02x}' for c in text[:32]) + '\n')
+    sys.stderr.write('--- RAW RESPONSE HEX PREFIX END ---\n')
     sys.stderr.write(f'parse error: {exc}\n')
     sys.exit(1)
 PY
@@ -104,23 +107,28 @@ printf '  AgentWallet CASH Auto Transfer\n'
 printf '============================================\n\n'
 
 printf '[1/5] Checking balance...\n'
-BALANCE_RAW=$(curl -sS -H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' -w "%{http_code}" "$API/wallets/$USERNAME/balances" || true)
-HTTP_STATUS="${BALANCE_RAW: -3}"
-BALANCE_RESPONSE="${BALANCE_RAW:: -3}"
-RESPONSE_LEN=${#BALANCE_RESPONSE}
+BALANCE_FILE=$(mktemp)
+cleanup() {
+  rm -f "$BALANCE_FILE"
+}
+trap cleanup EXIT
+HTTP_STATUS=$(curl -sS --compressed -H "Authorization: Bearer $TOKEN" -H 'Accept: application/json' -o "$BALANCE_FILE" -w "%{http_code}" "$API/wallets/$USERNAME/balances" || true)
+BALANCE_RESPONSE=$(cat "$BALANCE_FILE")
+RESPONSE_LEN=$(wc -c < "$BALANCE_FILE" | tr -d '[:space:]')
 printf '  HTTP status: %s\n' "$HTTP_STATUS"
 printf '  Response length: %s\n' "$RESPONSE_LEN"
 if [ -z "$BALANCE_RESPONSE" ] && [ "$HTTP_STATUS" != "200" ]; then
   echo "ERROR: AgentWallet balances request failed with HTTP status $HTTP_STATUS." >&2
-  echo "RAW RESPONSE:" >&2
-  echo "$BALANCE_RESPONSE" >&2
+  echo "RAW RESPONSE FILE PATH: $BALANCE_FILE" >&2
+  echo "RAW RESPONSE CONTENT:" >&2
+  cat "$BALANCE_FILE" >&2
   exit 1
 fi
 if [ -z "$BALANCE_RESPONSE" ]; then
   echo "ERROR: No response from AgentWallet balances endpoint." >&2
   exit 1
 fi
-validate_json <<<"$BALANCE_RESPONSE"
+validate_json < "$BALANCE_FILE"
 
 SOL_ADDR=$(python3 - <<'PY'
 import json, sys
