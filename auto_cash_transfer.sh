@@ -45,6 +45,19 @@ fi
 
 mkdir -p "$(dirname "$STATE_FILE")"
 
+validate_json() {
+  python3 - <<'PY'
+import json, sys
+text = sys.stdin.read()
+try:
+    json.loads(text)
+except Exception as exc:
+    sys.stderr.write('ERROR: Invalid JSON response from AgentWallet balances endpoint.\n')
+    sys.stderr.write(text + '\n')
+    sys.exit(1)
+PY
+}
+
 load_state() {
   if [ -f "$STATE_FILE" ]; then
     python3 - <<'PY'
@@ -85,11 +98,12 @@ printf '  AgentWallet CASH Auto Transfer\n'
 printf '============================================\n\n'
 
 printf '[1/5] Checking balance...\n'
-BALANCE_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" "$API/wallets/$USERNAME/balances")
+BALANCE_RESPONSE=$(curl -sS -H "Authorization: Bearer $TOKEN" "$API/wallets/$USERNAME/balances" || true)
 if [ -z "$BALANCE_RESPONSE" ]; then
   echo "ERROR: No response from AgentWallet balances endpoint." >&2
   exit 1
 fi
+validate_json <<<"$BALANCE_RESPONSE"
 
 SOL_ADDR=$(python3 - <<'PY'
 import json, sys
