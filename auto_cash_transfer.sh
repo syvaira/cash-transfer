@@ -53,7 +53,9 @@ try:
     json.loads(text)
 except Exception as exc:
     sys.stderr.write('ERROR: Invalid JSON response from AgentWallet balances endpoint.\n')
+    sys.stderr.write('--- RAW RESPONSE START ---\n')
     sys.stderr.write(text + '\n')
+    sys.stderr.write('--- RAW RESPONSE END ---\n')
     sys.exit(1)
 PY
 }
@@ -98,7 +100,15 @@ printf '  AgentWallet CASH Auto Transfer\n'
 printf '============================================\n\n'
 
 printf '[1/5] Checking balance...\n'
-BALANCE_RESPONSE=$(curl -sS -H "Authorization: Bearer $TOKEN" "$API/wallets/$USERNAME/balances" || true)
+BALANCE_RAW=$(curl -sS -H "Authorization: Bearer $TOKEN" -w "%{http_code}" "$API/wallets/$USERNAME/balances" || true)
+HTTP_STATUS="${BALANCE_RAW: -3}"
+BALANCE_RESPONSE="${BALANCE_RAW:: -3}"
+if [ -z "$BALANCE_RESPONSE" ] && [ "$HTTP_STATUS" != "200" ]; then
+  echo "ERROR: AgentWallet balances request failed with HTTP status $HTTP_STATUS." >&2
+  echo "RAW RESPONSE:" >&2
+  echo "$BALANCE_RESPONSE" >&2
+  exit 1
+fi
 if [ -z "$BALANCE_RESPONSE" ]; then
   echo "ERROR: No response from AgentWallet balances endpoint." >&2
   exit 1
