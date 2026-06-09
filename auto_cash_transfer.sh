@@ -150,23 +150,27 @@ if [ -z "$SOL_ADDR" ]; then
   exit 1
 fi
 
-RAW_VALUE=$(python3 - "$BALANCE_RESPONSE" <<'PY'
-import json, sys
-obj = json.loads(sys.argv[1])
-solanas = obj.get('solanaWallets') or obj.get('solana')
-balances = []
-if isinstance(solanas, list) and len(solanas) > 0:
-    balances = solanas[0].get('balances', [])
-elif isinstance(solanas, dict):
-    balances = solanas.get('balances', [])
-raw = '0'
-for item in balances:
-    if item.get('asset','').lower() == 'cash':
-        raw = item.get('rawValue', '0')
-        break
-print(raw)
-PY
-)
+printf '[2/5] Fetching source token account...\n'
+SRC_JSON=$(curl -s -X POST -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenAccountsByOwner\",\"params\":[\"$SOL_ADDR\",{\"mint\":\"$CASH_MINT\"},{\"encoding\":\"jsonParsed\"}]}" "$RPC")
+SRC=$(python3 -c 'import json, sys
+obj = json.loads(sys.stdin.read())
+value = obj.get("result", {}).get("value", [])
+print(value[0].get("pubkey","") if value else "")' <<<"$SRC_JSON")
+
+if [ -z "$SRC" ]; then
+  echo "ERROR: Source CASH token account not found for $SOL_ADDR." >&2
+  exit 1
+fi
+
+SRC_BALANCE_JSON=$(curl -s -X POST -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenAccountBalance\",\"params\":[\"$SRC\"]}" "$RPC")
+RAW_VALUE=$(python3 -c 'import json, sys
+obj = json.loads(sys.stdin.read())
+value = obj.get("result", {}).get("value", {})
+print(value.get("amount", "0"))' <<<"$SRC_BALANCE_JSON")
+UI_AMOUNT=$(python3 -c 'import json, sys
+obj = json.loads(sys.stdin.read())
+value = obj.get("result", {}).get("value", {})
+print(value.get("uiAmountString", "0"))' <<<"$SRC_BALANCE_JSON")
 
 if [ -z "$RAW_VALUE" ] || [ "$RAW_VALUE" = "0" ]; then
   echo "No CASH balance available to send. Current raw balance: $RAW_VALUE"
@@ -174,27 +178,13 @@ if [ -z "$RAW_VALUE" ] || [ "$RAW_VALUE" = "0" ]; then
 fi
 
 printf '  OK Solana : %s\n' "$SOL_ADDR"
-printf '  OK CASH   : %s (raw units)\n' "$RAW_VALUE"
+printf '  OK CASH   : %s (%s raw units)\n' "$UI_AMOUNT" "$RAW_VALUE"
 
 if [ "$RAW_VALUE" = "$LAST_SENT_RAW" ]; then
   echo "Balance is unchanged since last transfer; nothing to do."
   exit 0
 fi
 
-printf '[2/5] Fetching source token account...\n'
-SRC_JSON=$(curl -s -X POST -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenAccountsByOwner\",\"params\":[\"$SOL_ADDR\",{\"mint\":\"$CASH_MINT\"},{\"encoding\":\"jsonParsed\"}]}" "$RPC")
-SRC=$(python3 - "$SRC_JSON" <<'PY'
-import json, sys
-obj = json.loads(sys.argv[1])
-value = obj.get('result', {}).get('value', [])
-print(value[0].get('pubkey','') if value else '')
-PY
-)
-
-if [ -z "$SRC" ]; then
-  echo "ERROR: Source CASH token account not found for $SOL_ADDR." >&2
-  exit 1
-fi
 printf '  OK Source : %s\n' "$SRC"
 
 printf '[3/5] Fetching destination token account...\n'
