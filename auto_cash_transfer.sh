@@ -46,9 +46,11 @@ fi
 mkdir -p "$(dirname "$STATE_FILE")"
 
 validate_json() {
-  python3 - <<'PY'
+  python3 - "$1" <<'PY'
 import json, sys
-text = sys.stdin.read()
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8') as f:
+    text = f.read()
 try:
     json.loads(text)
 except Exception as exc:
@@ -94,12 +96,12 @@ PY
 }
 
 STATE_JSON=$(load_state)
-LAST_SENT_RAW=$(python3 - <<'PY'
+LAST_SENT_RAW=$(python3 - "$STATE_JSON" <<'PY'
 import json, sys
-state = json.loads(sys.stdin.read())
+state = json.loads(sys.argv[1])
 print(state.get('lastSentRaw', '0'))
 PY
-<<<"$STATE_JSON")
+)
 
 printf '\n'
 printf '============================================\n'
@@ -128,11 +130,11 @@ if [ -z "$BALANCE_RESPONSE" ]; then
   echo "ERROR: No response from AgentWallet balances endpoint." >&2
   exit 1
 fi
-validate_json < "$BALANCE_FILE"
+validate_json "$BALANCE_FILE"
 
-SOL_ADDR=$(python3 - <<'PY'
+SOL_ADDR=$(python3 - "$BALANCE_RESPONSE" <<'PY'
 import json, sys
-obj = json.loads(sys.stdin.read())
+obj = json.loads(sys.argv[1])
 solanas = obj.get('solanaWallets') or obj.get('solana')
 address = ''
 if isinstance(solanas, list) and len(solanas) > 0:
@@ -141,16 +143,16 @@ elif isinstance(solanas, dict):
     address = solanas.get('address','')
 print(address or '')
 PY
-<<<"$BALANCE_RESPONSE")
+)
 
 if [ -z "$SOL_ADDR" ]; then
   echo "ERROR: Unable to parse Solana address from balances response." >&2
   exit 1
 fi
 
-RAW_VALUE=$(python3 - <<'PY'
+RAW_VALUE=$(python3 - "$BALANCE_RESPONSE" <<'PY'
 import json, sys
-obj = json.loads(sys.stdin.read())
+obj = json.loads(sys.argv[1])
 solanas = obj.get('solanaWallets') or obj.get('solana')
 balances = []
 if isinstance(solanas, list) and len(solanas) > 0:
@@ -164,7 +166,7 @@ for item in balances:
         break
 print(raw)
 PY
-<<<"$BALANCE_RESPONSE")
+)
 
 if [ -z "$RAW_VALUE" ] || [ "$RAW_VALUE" = "0" ]; then
   echo "No CASH balance available to send. Current raw balance: $RAW_VALUE"
@@ -181,13 +183,13 @@ fi
 
 printf '[2/5] Fetching source token account...\n'
 SRC_JSON=$(curl -s -X POST -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenAccountsByOwner\",\"params\":[\"$SOL_ADDR\",{\"mint\":\"$CASH_MINT\"},{\"encoding\":\"jsonParsed\"}]}" "$RPC")
-SRC=$(python3 - <<'PY'
+SRC=$(python3 - "$SRC_JSON" <<'PY'
 import json, sys
-obj = json.loads(sys.stdin.read())
+obj = json.loads(sys.argv[1])
 value = obj.get('result', {}).get('value', [])
 print(value[0].get('pubkey','') if value else '')
 PY
-<<<"$SRC_JSON")
+)
 
 if [ -z "$SRC" ]; then
   echo "ERROR: Source CASH token account not found for $SOL_ADDR." >&2
@@ -197,13 +199,13 @@ printf '  OK Source : %s\n' "$SRC"
 
 printf '[3/5] Fetching destination token account...\n'
 DST_JSON=$(curl -s -X POST -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenAccountsByOwner\",\"params\":[\"$DEST\",{\"mint\":\"$CASH_MINT\"},{\"encoding\":\"jsonParsed\"}]}" "$RPC")
-DST=$(python3 - <<'PY'
+DST=$(python3 - "$DST_JSON" <<'PY'
 import json, sys
-obj = json.loads(sys.stdin.read())
+obj = json.loads(sys.argv[1])
 value = obj.get('result', {}).get('value', [])
 print(value[0].get('pubkey','') if value else '')
 PY
-<<<"$DST_JSON")
+)
 
 if [ -z "$DST" ]; then
   echo "ERROR: Destination CASH token account not found for $DEST." >&2
@@ -213,8 +215,8 @@ fi
 printf '  OK Dest   : %s\n' "$DST"
 
 printf '[4/5] Encoding instruction data...\n'
-DATA=$(node - <<'NODE'
-const raw = BigInt($RAW_VALUE);
+DATA=$(node - "$RAW_VALUE" <<'NODE'
+const raw = BigInt(process.argv[2]);
 const buf = Buffer.alloc(10);
 buf[0] = 12;
 let value = raw;
