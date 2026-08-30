@@ -146,8 +146,11 @@ PY
 
 if [ -z "$SOL_ADDR" ]; then
   echo "ERROR: Unable to parse Solana address from balances response." >&2
+  echo "RAW BALANCES RESPONSE:" >&2
+  echo "$BALANCE_RESPONSE" >&2
   exit 1
 fi
+printf '  Solana addr: %s\n' "$SOL_ADDR"
 
 printf '[2/5] Fetching source token account...\n'
 SRC_JSON=$(curl -s -X POST -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getTokenAccountsByOwner\",\"params\":[\"$SOL_ADDR\",{\"mint\":\"$CASH_MINT\"},{\"encoding\":\"jsonParsed\"}]}" "$RPC")
@@ -158,6 +161,8 @@ print(value[0].get("pubkey","") if value else "")' <<<"$SRC_JSON")
 
 if [ -z "$SRC" ]; then
   echo "ERROR: Source CASH token account not found for $SOL_ADDR." >&2
+  echo "RAW getTokenAccountsByOwner RESPONSE:" >&2
+  echo "$SRC_JSON" >&2
   exit 1
 fi
 
@@ -173,6 +178,10 @@ print(value.get("uiAmountString", "0"))' <<<"$SRC_BALANCE_JSON")
 
 if [ -z "$RAW_VALUE" ] || [ "$RAW_VALUE" = "0" ]; then
   echo "No CASH balance available to send. Current raw balance: $RAW_VALUE"
+  echo "  Solana addr used : $SOL_ADDR" >&2
+  echo "  Source token acct: $SRC" >&2
+  echo "RAW getTokenAccountBalance RESPONSE:" >&2
+  echo "$SRC_BALANCE_JSON" >&2
   exit 0
 fi
 
