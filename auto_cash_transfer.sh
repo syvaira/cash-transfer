@@ -71,9 +71,9 @@ PY
 
 load_state() {
   if [ -f "$STATE_FILE" ]; then
-    python3 - <<'PY'
-import json, pathlib
-path = pathlib.Path('${STATE_FILE}')
+    python3 - "$STATE_FILE" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
 try:
     data = json.loads(path.read_text())
 except Exception:
@@ -86,13 +86,12 @@ PY
 }
 
 save_state() {
-  python3 - <<'PY'
+  python3 - "$STATE_FILE" "$1" <<'PY'
 import json, pathlib, sys
-state = json.loads(sys.argv[1])
-path = pathlib.Path('${STATE_FILE}')
-path.write_text(json.dumps(state, indent=2))
+state_file, payload = sys.argv[1], sys.argv[2]
+state = json.loads(payload)
+pathlib.Path(state_file).write_text(json.dumps(state, indent=2))
 PY
-"$1"
 }
 
 STATE_JSON=$(load_state)
@@ -233,21 +232,21 @@ TX=$(curl -s -X POST "$API/wallets/$USERNAME/actions/contract-call" \
 
 if echo "$TX" | grep -q '"status":"confirmed"'; then
   HASH=$(echo "$TX" | grep -o '"txHash":"[^" ]*"' | cut -d'"' -f4 || true)
-  NEW_STATE=$(python3 - <<'PY'
+  NEW_STATE=$(python3 - "$STATE_JSON" "$RAW_VALUE" "$HASH" <<'PY'
 import json, datetime, sys
 state = json.loads(sys.argv[1])
-state['lastSentRaw'] = '$RAW_VALUE'
+state['lastSentRaw'] = sys.argv[2]
 state['lastSentAt'] = datetime.datetime.utcnow().isoformat() + 'Z'
-state['lastTx'] = '$HASH'
+state['lastTx'] = sys.argv[3]
 print(json.dumps(state))
 PY
-"$STATE_JSON")
+)
   save_state "$NEW_STATE"
   printf '\n'
-printf '============================================\n'
-printf '  TRANSFER CONFIRMED!\n'
-printf '============================================\n\n'
-printf '  Explorer : https://solscan.io/tx/%s\n' "$HASH"
+  printf '============================================\n'
+  printf '  TRANSFER CONFIRMED!\n'
+  printf '============================================\n\n'
+  printf '  Explorer : https://solscan.io/tx/%s\n' "$HASH"
   exit 0
 else
   echo "ERROR: Transaction failed." >&2
